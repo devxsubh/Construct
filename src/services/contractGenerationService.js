@@ -39,17 +39,18 @@ IMPORTANT:
 - Return ONLY the JSON object, no additional text`;
 
 			const response = await aiService.generateContent(extractionPrompt, {
-				systemPrompt: 'You are a contract information extraction expert. Extract contract details from user requests and return ONLY valid JSON.',
+				systemPrompt:
+					'You are a contract information extraction expert. Extract contract details from user requests and return ONLY valid JSON.',
 				temperature: 0.3,
 				maxTokens: 2000
 			});
 
 			// Clean and parse JSON response
 			let cleanedResponse = response.trim();
-			
+
 			// Remove markdown code blocks if present
 			cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '').replace(/```\s*/gi, '');
-			
+
 			// Try to extract JSON from response
 			const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
 			if (jsonMatch) {
@@ -108,7 +109,7 @@ IMPORTANT:
 Title: ${title}
 Type: ${type}
 Description: ${description}
-Parties: ${parties.map(p => `${p.name} (${p.role}) - ${p.email}`).join(', ')}
+Parties: ${parties.map((p) => `${p.name} (${p.role}) - ${p.email}`).join(', ')}
 Jurisdiction: ${jurisdiction}
 Start Date: ${startDate}
 End Date: ${endDate}
@@ -145,7 +146,8 @@ IMPORTANT:
 - Make it professional and legally appropriate for ${jurisdiction} jurisdiction`;
 
 			const contractContent = await aiService.generateContent(generationPrompt, {
-				systemPrompt: 'You are a legal contract expert. Generate professional, legally sound contracts in BlockNote JSON format. Return ONLY a valid JSON array of blocks, no additional text.',
+				systemPrompt:
+					'You are a legal contract expert. Generate professional, legally sound contracts in BlockNote JSON format. Return ONLY a valid JSON array of blocks, no additional text.',
 				temperature: 0.7,
 				maxTokens: 4000
 			});
@@ -282,4 +284,3 @@ IMPORTANT:
 }
 
 export default new ContractGenerationService();
-

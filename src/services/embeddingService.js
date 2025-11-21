@@ -65,7 +65,7 @@ class EmbeddingService {
 			// Use embedding-001 model
 			const model = googleAI.getGenerativeModel({ model: 'embedding-001' });
 			const result = await model.embedContent(text);
-			
+
 			return result.embedding.values;
 		} catch (error) {
 			logger.error('Error generating Google AI embedding:', error);
@@ -126,17 +126,17 @@ class EmbeddingService {
 				try {
 					const response = await openai.embeddings.create({
 						model: this.embeddingModel,
-						input: texts.map(text => text.length > 8000 ? text.substring(0, 8000) : text)
+						input: texts.map((text) => (text.length > 8000 ? text.substring(0, 8000) : text))
 					});
-					return response.data.map(item => item.embedding);
+					return response.data.map((item) => item.embedding);
 				} catch (error) {
 					logger.warn('OpenAI batch embedding failed, falling back to individual:', error.message);
 					// Fallback to individual embeddings
-					return Promise.all(texts.map(text => this.generateEmbedding(text, provider)));
+					return Promise.all(texts.map((text) => this.generateEmbedding(text, provider)));
 				}
 			} else {
 				// Google AI - process individually
-				return Promise.all(texts.map(text => this.generateEmbedding(text, provider)));
+				return Promise.all(texts.map((text) => this.generateEmbedding(text, provider)));
 			}
 		} catch (error) {
 			logger.error('Error generating batch embeddings:', error);
@@ -179,7 +179,7 @@ class EmbeddingService {
 	normalizeVector(vector) {
 		const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
 		if (magnitude === 0) return vector;
-		return vector.map(val => val / magnitude);
+		return vector.map((val) => val / magnitude);
 	}
 
 	/**
@@ -192,4 +192,3 @@ class EmbeddingService {
 }
 
 export default new EmbeddingService();
-

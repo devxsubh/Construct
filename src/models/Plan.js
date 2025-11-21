@@ -67,4 +67,3 @@ planSchema.index({ interval: 1 });
 const Plan = mongoose.model('Plan', planSchema);
 
 export default Plan;
-

@@ -109,7 +109,7 @@ class UserClass {
 		if (await this.isEmailAlreadyExists(body.email)) {
 			throw new APIError('Email already exists', httpStatus.BAD_REQUEST);
 		}
-		
+
 		// Validate roles if provided
 		if (body.roles && body.roles.length > 0) {
 			await Promise.all(
@@ -126,7 +126,7 @@ class UserClass {
 				body.roles = [userRole._id];
 			}
 		}
-		
+
 		return await this.create(body);
 	}
 
@@ -141,7 +141,7 @@ class UserClass {
 		if (await this.isEmailAlreadyExists(body.email, userId)) {
 			throw new APIError('Email already exists', httpStatus.BAD_REQUEST);
 		}
-		
+
 		// Validate roles if provided
 		if (body.roles && body.roles.length > 0) {
 			await Promise.all(
@@ -152,7 +152,7 @@ class UserClass {
 				})
 			);
 		}
-		
+
 		Object.assign(user, body);
 		return await user.save();
 	}

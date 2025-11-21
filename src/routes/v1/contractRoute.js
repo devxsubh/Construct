@@ -9,7 +9,13 @@ import checkSubscription from '~/middlewares/checkSubscription';
 const router = Router();
 
 // Contract CRUD operations
-router.post('/', authenticate(), checkSubscription, validate(contractValidation.createContract), catchAsync(contractController.createContract));
+router.post(
+	'/',
+	authenticate(),
+	checkSubscription,
+	validate(contractValidation.createContract),
+	catchAsync(contractController.createContract)
+);
 router.post(
 	'/generate',
 	authenticate(),

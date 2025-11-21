@@ -15,4 +15,3 @@ router.get('/', catchAsync(roleController.getRoles));
 router.get('/:roleId', catchAsync(roleController.getRoleById));
 
 export default router;
-

@@ -13,15 +13,11 @@ const checkSubscription = catchAsync(async (req, res, next) => {
 	const limitCheck = await subscriptionService.checkContractCreationLimit(userId);
 
 	if (!limitCheck.canCreate) {
-		throw new APIError(
-			limitCheck.reason || 'Subscription required to create more contracts',
-			httpStatus.PAYMENT_REQUIRED,
-			{
-				remainingFree: limitCheck.remainingFree,
-				limit: limitCheck.limit,
-				requiresSubscription: true
-			}
-		);
+		throw new APIError(limitCheck.reason || 'Subscription required to create more contracts', httpStatus.PAYMENT_REQUIRED, {
+			remainingFree: limitCheck.remainingFree,
+			limit: limitCheck.limit,
+			requiresSubscription: true
+		});
 	}
 
 	// Attach subscription info to request for use in controller
@@ -31,4 +27,3 @@ const checkSubscription = catchAsync(async (req, res, next) => {
 });
 
 export default checkSubscription;
-

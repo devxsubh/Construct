@@ -46,10 +46,14 @@ export const forgotPassword = {
 export const resetPassword = {
 	body: Joi.object().keys({
 		email: Joi.string().email().required(),
-		otp: Joi.string().length(6).pattern(/^[0-9]+$/).required().messages({
-			'string.length': 'OTP must be exactly 6 digits',
-			'string.pattern.base': 'OTP must contain only numbers'
-		}),
+		otp: Joi.string()
+			.length(6)
+			.pattern(/^[0-9]+$/)
+			.required()
+			.messages({
+				'string.length': 'OTP must be exactly 6 digits',
+				'string.pattern.base': 'OTP must contain only numbers'
+			}),
 		password: Joi.string().trim().min(6).max(666).required(),
 		confirmPassword: Joi.string().valid(Joi.ref('password')).required().messages({
 			'any.only': 'Passwords do not match',

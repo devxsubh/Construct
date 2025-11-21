@@ -63,11 +63,7 @@ class SubscriptionController {
 			throw new APIError('Subscription ID, payment ID, and signature are required', httpStatus.BAD_REQUEST);
 		}
 
-		const subscription = await subscriptionService.verifyAndActivateSubscription(
-			subscriptionId,
-			paymentId,
-			signature
-		);
+		const subscription = await subscriptionService.verifyAndActivateSubscription(subscriptionId, paymentId, signature);
 
 		res.status(httpStatus.OK).json({
 			success: true,
@@ -103,4 +99,3 @@ class SubscriptionController {
 }
 
 export default new SubscriptionController();
-

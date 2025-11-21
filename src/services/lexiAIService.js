@@ -134,29 +134,31 @@ class LexiAIService {
 
 			const conversation = await this.getConversation(conversationId, userId);
 			await conversation.addMessage(role, content, metadata);
-			
+
 			// Get the newly added message (last message in array)
 			const newMessage = conversation.messages[conversation.messages.length - 1];
-			
+
 			// Generate and store embedding for non-system messages (async, don't wait)
 			if (role !== 'system' && newMessage._id) {
-				contextService.storeMessageEmbedding({
-					userId,
-					conversationId,
-					messageId: newMessage._id,
-					role,
-					content,
-					metadata
-				}).catch(err => {
-					// Log error but don't fail the message addition
-					logger.error('Failed to store message embedding:', err);
-				});
-				
+				contextService
+					.storeMessageEmbedding({
+						userId,
+						conversationId,
+						messageId: newMessage._id,
+						role,
+						content,
+						metadata
+					})
+					.catch((err) => {
+						// Log error but don't fail the message addition
+						logger.error('Failed to store message embedding:', err);
+					});
+
 				// Mark embedding as generated
 				newMessage.embeddingGenerated = true;
 				await conversation.save();
 			}
-			
+
 			return conversation;
 		} catch (error) {
 			if (error instanceof APIError) {
@@ -243,9 +245,9 @@ class LexiAIService {
 
 					// Combine semantic and recent messages, removing duplicates
 					const messageMap = new Map();
-					
+
 					// Add recent messages first (they're more important for continuity)
-					recentMessages.forEach(msg => {
+					recentMessages.forEach((msg) => {
 						if (msg.role !== 'system') {
 							messageMap.set(msg.content.substring(0, 100), {
 								role: msg.role,
@@ -255,7 +257,7 @@ class LexiAIService {
 					});
 
 					// Add semantic context (may override recent if more relevant)
-					semanticContext.forEach(msg => {
+					semanticContext.forEach((msg) => {
 						if (msg.role !== 'system') {
 							messageMap.set(msg.content.substring(0, 100), {
 								role: msg.role,

@@ -84,4 +84,3 @@ subscriptionSchema.statics.getActiveSubscription = async function (userId) {
 const Subscription = mongoose.model('Subscription', subscriptionSchema);
 
 export default Subscription;
-

@@ -64,14 +64,7 @@ class ContextService {
 	 */
 	async findSimilarContext(queryText, options = {}) {
 		try {
-			const {
-				userId,
-				conversationId,
-				limit = 5,
-				threshold = 0.7,
-				excludeMessageIds = [],
-				metadataFilter = {}
-			} = options;
+			const { userId, conversationId, limit = 5, threshold = 0.7, excludeMessageIds = [], metadataFilter = {} } = options;
 
 			if (!userId) {
 				throw new APIError('User ID is required', httpStatus.BAD_REQUEST);
@@ -110,13 +103,7 @@ class ContextService {
 	 */
 	async getRelevantContext(queryText, options = {}) {
 		try {
-			const {
-				userId,
-				conversationId,
-				recentLimit = 3,
-				semanticLimit = 5,
-				threshold = 0.7
-			} = options;
+			const { userId, conversationId, recentLimit = 3, semanticLimit = 5, threshold = 0.7 } = options;
 
 			// Get semantically similar messages
 			const similarMessages = await this.findSimilarContext(queryText, {
@@ -127,7 +114,7 @@ class ContextService {
 			});
 
 			// Format for AI context (combine role and content)
-			const contextMessages = similarMessages.map(msg => ({
+			const contextMessages = similarMessages.map((msg) => ({
 				role: msg.role,
 				content: msg.content,
 				similarity: msg.similarity,
@@ -152,14 +139,12 @@ class ContextService {
 	 */
 	async storeMessageEmbeddingsBatch(messages) {
 		try {
-			const results = await Promise.allSettled(
-				messages.map(msg => this.storeMessageEmbedding(msg))
-			);
+			const results = await Promise.allSettled(messages.map((msg) => this.storeMessageEmbedding(msg)));
 
-			const successful = results.filter(r => r.status === 'fulfilled' && r.value !== null);
+			const successful = results.filter((r) => r.status === 'fulfilled' && r.value !== null);
 			logger.info(`Stored ${successful.length}/${messages.length} message embeddings in batch`);
 
-			return successful.map(r => r.value);
+			return successful.map((r) => r.value);
 		} catch (error) {
 			logger.error('Error storing batch embeddings:', error);
 			return [];
@@ -199,4 +184,3 @@ class ContextService {
 }
 
 export default new ContextService();
-

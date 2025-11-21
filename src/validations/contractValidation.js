@@ -159,12 +159,11 @@ const rewriteSection = {
 
 const generateAIContract = {
 	body: Joi.object().keys({
-		prompt: Joi.string().min(10).max(2000).required()
-			.messages({
-				'string.min': 'Please provide a more detailed description (at least 10 characters)',
-				'string.max': 'Description is too long (maximum 2000 characters)',
-				'any.required': 'Please describe the contract you want to generate'
-			})
+		prompt: Joi.string().min(10).max(2000).required().messages({
+			'string.min': 'Please provide a more detailed description (at least 10 characters)',
+			'string.max': 'Description is too long (maximum 2000 characters)',
+			'any.required': 'Please describe the contract you want to generate'
+		})
 	})
 };
 

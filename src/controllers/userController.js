@@ -77,7 +77,12 @@ export const getUser = async (req, res) => {
 
 export const updateUser = async (req, res) => {
 	const role = await Role.findOne({ name: 'SuperAdmin' });
-	if (req.body.roles && role && !(await User.isRoleIdAlreadyExists(role._id, req.params.userId)) && !req.body.roles.includes(role._id.toString())) {
+	if (
+		req.body.roles &&
+		role &&
+		!(await User.isRoleIdAlreadyExists(role._id, req.params.userId)) &&
+		!req.body.roles.includes(role._id.toString())
+	) {
 		throw new APIError('Requires at least 1 user as SuperAdmin', httpStatus.BAD_REQUEST);
 	}
 	const user = await User.updateUserById(req.params.userId, req.body);

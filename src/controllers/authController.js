@@ -299,7 +299,7 @@ export const resetPassword = async (req, res) => {
 		// Verify OTP token
 		const resetPasswordTokenDoc = await tokenService.verifyToken(otp, config.TOKEN_TYPES.RESET_PASSWORD);
 		const user = await User.getUserById(resetPasswordTokenDoc.user);
-		
+
 		if (!user) {
 			throw new APIError('User not found', httpStatus.NOT_FOUND);
 		}

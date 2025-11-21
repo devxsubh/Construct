@@ -11,7 +11,12 @@ const router = Router();
 router.get('/', authenticate('Admin', 'SuperAdmin'), validate(userValidation.getUsers), catchAsync(userController.getUsers));
 router.post('/', authenticate('Admin', 'SuperAdmin'), validate(userValidation.createUser), catchAsync(userController.createUser));
 router.get('/:userId', authenticate('Admin', 'SuperAdmin'), validate(userValidation.getUser), catchAsync(userController.getUser));
-router.put('/:userId', authenticate('Admin', 'SuperAdmin'), validate(userValidation.updateUser), catchAsync(userController.updateUser));
+router.put(
+	'/:userId',
+	authenticate('Admin', 'SuperAdmin'),
+	validate(userValidation.updateUser),
+	catchAsync(userController.updateUser)
+);
 router.delete(
 	'/:userId',
 	authenticate('Admin', 'SuperAdmin'),

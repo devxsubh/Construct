@@ -23,7 +23,7 @@ class SubscriptionService {
 
 			// Check if user has active subscription
 			const activeSubscription = await Subscription.getActiveSubscription(userId);
-			
+
 			if (activeSubscription) {
 				// User has active subscription - unlimited contracts
 				return {
@@ -82,8 +82,7 @@ class SubscriptionService {
 	 */
 	async getPlans() {
 		try {
-			const plans = await Plan.find({ isActive: true })
-				.sort({ sortOrder: 1, price: 1 });
+			const plans = await Plan.find({ isActive: true }).sort({ sortOrder: 1, price: 1 });
 			return plans;
 		} catch (error) {
 			logger.error('Error getting plans:', error);
@@ -121,7 +120,7 @@ class SubscriptionService {
 		try {
 			const plan = await this.getPlanById(planId);
 			const user = await User.findById(userId);
-			
+
 			if (!user) {
 				throw new APIError('User not found', httpStatus.NOT_FOUND);
 			}
@@ -179,11 +178,7 @@ class SubscriptionService {
 			}
 
 			// Verify payment signature
-			const isValid = await razorpayService.verifyPaymentSignature(
-				subscription.razorpayOrderId,
-				paymentId,
-				signature
-			);
+			const isValid = await razorpayService.verifyPaymentSignature(subscription.razorpayOrderId, paymentId, signature);
 
 			if (!isValid) {
 				throw new APIError('Invalid payment signature', httpStatus.BAD_REQUEST);
@@ -292,10 +287,12 @@ class SubscriptionService {
 				freeLimit: FREE_CONTRACT_LIMIT,
 				remainingFree: Math.max(0, FREE_CONTRACT_LIMIT - (user.contractCount || 0)),
 				hasSubscription: !!subscription,
-				subscription: subscription ? {
-					plan: subscription.planId,
-					periodEnd: subscription.currentPeriodEnd
-				} : null
+				subscription: subscription
+					? {
+							plan: subscription.planId,
+							periodEnd: subscription.currentPeriodEnd
+					  }
+					: null
 			};
 		} catch (error) {
 			logger.error('Error getting usage stats:', error);
@@ -305,4 +302,3 @@ class SubscriptionService {
 }
 
 export default new SubscriptionService();
-

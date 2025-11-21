@@ -51,12 +51,7 @@ router.delete(
 );
 
 // AI Assistant features
-router.post(
-	'/summarize',
-	authenticate(),
-	validate(lexiValidation.summarizeText),
-	catchAsync(lexiController.summarizeText)
-);
+router.post('/summarize', authenticate(), validate(lexiValidation.summarizeText), catchAsync(lexiController.summarizeText));
 
 router.post(
 	'/explain',

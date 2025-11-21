@@ -27,4 +27,3 @@ router.post('/verify-payment', catchAsync(subscriptionController.verifyPayment))
 router.post('/cancel', catchAsync(subscriptionController.cancelSubscription));
 
 export default router;
-

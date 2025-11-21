@@ -49,10 +49,7 @@ class RazorpayService {
 	async verifyPaymentSignature(orderId, paymentId, signature) {
 		try {
 			const text = `${orderId}|${paymentId}`;
-			const generatedSignature = crypto
-				.createHmac('sha256', config.razorpay.keySecret)
-				.update(text)
-				.digest('hex');
+			const generatedSignature = crypto.createHmac('sha256', config.razorpay.keySecret).update(text).digest('hex');
 
 			return generatedSignature === signature;
 		} catch (error) {
@@ -103,4 +100,3 @@ class RazorpayService {
 }
 
 export default new RazorpayService();
-
