@@ -1,19 +1,14 @@
-import { OpenAI } from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import config from '../config/config.js';
 import cacheService from './cacheService.js';
 import logger from '../config/logger.js';
 
 // Initialize AI clients
-const openai = new OpenAI({
-	apiKey: config.openai.apiKey
-});
-
 const googleAI = config.googleAI.apiKey ? new GoogleGenerativeAI(config.googleAI.apiKey) : null;
 
 class AIService {
 	constructor() {
-		this.providers = ['google', 'openai'];
+		this.providers = ['google'];
 		this.currentProvider = 0; // Start with Google AI (Gemini)
 	}
 
@@ -21,32 +16,6 @@ class AIService {
 	getNextProvider() {
 		this.currentProvider = (this.currentProvider + 1) % this.providers.length;
 		return this.providers[this.currentProvider];
-	}
-
-	// Generate contract content using OpenAI
-	async generateWithOpenAI(prompt, options = {}) {
-		try {
-			const response = await openai.chat.completions.create({
-				model: options.model || 'gpt-4',
-				messages: [
-					{
-						role: 'system',
-						content: options.systemPrompt || 'You are a legal contract expert. Generate professional, legally sound contracts.'
-					},
-					{
-						role: 'user',
-						content: prompt
-					}
-				],
-				temperature: options.temperature || 0.7,
-				max_tokens: options.maxTokens || 4000
-			});
-
-			return response.choices[0].message.content;
-		} catch (error) {
-			logger.error('OpenAI API error:', error);
-			throw error;
-		}
 	}
 
 	// Generate contract content using Google AI (Gemini)
@@ -82,7 +51,64 @@ class AIService {
 		throw new Error('All Google AI models failed');
 	}
 
-	// Generate content with fallback and caching
+	/**
+	 * Generate content with conversation history (for iterative editing)
+	 * @param {string} prompt - User's prompt
+	 * @param {Array} history - Conversation history (from ContractConversation)
+	 * @param {Object} options - Generation options
+	 * @returns {Promise<Object>} - Response text and updated history
+	 */
+	async generateWithChatHistory(prompt, history = [], options = {}) {
+		if (!googleAI) {
+			throw new Error('Google AI not configured');
+		}
+
+		const modelNames = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-pro'];
+
+		for (const modelName of modelNames) {
+			try {
+				const model = googleAI.getGenerativeModel({
+					model: modelName,
+					systemInstruction: options.systemPrompt || 'You are a legal contract expert. Generate professional, legally sound contracts.'
+				});
+
+				// Convert history to Google AI format
+				const chatHistory = history
+					.filter((msg) => msg.role !== 'system')
+					.map((msg) => ({
+						role: msg.role === 'user' ? 'user' : 'model',
+						parts: [{ text: msg.parts }]
+					}));
+
+				// Start chat with history
+				const chat = model.startChat({
+					history: chatHistory
+				});
+
+				// Send new message
+				const result = await chat.sendMessage(prompt);
+				const response = await result.response;
+				const responseText = response.text();
+
+				// Return response and updated history
+				return {
+					text: responseText,
+					history: [
+						...history,
+						{ role: 'user', parts: prompt },
+						{ role: 'model', parts: responseText }
+					]
+				};
+			} catch (error) {
+				logger.warn(`Google AI model ${modelName} failed:`, error.message);
+				continue;
+			}
+		}
+
+		throw new Error('All Google AI models failed');
+	}
+
+	// Generate content with caching
 	async generateContent(prompt, options = {}) {
 		// Check cache first
 		const cachedResponse = await cacheService.getCachedAIResponse(prompt);
@@ -91,33 +117,18 @@ class AIService {
 			return cachedResponse;
 		}
 
-		// Try providers in order (Google AI first, then OpenAI)
-		const providers = ['google', 'openai'];
-		let lastError = null;
+		// Use Google AI
+		try {
+			const response = await this.generateWithGoogleAI(prompt, options);
+			
+			// Cache the successful response
+			await cacheService.cacheAIResponse(prompt, response, options.cacheTTL || 3600);
 
-		for (const provider of providers) {
-			try {
-				let response;
-
-				if (provider === 'google') {
-					response = await this.generateWithGoogleAI(prompt, options);
-				} else if (provider === 'openai') {
-					response = await this.generateWithOpenAI(prompt, options);
-				}
-
-				// Cache the successful response
-				await cacheService.cacheAIResponse(prompt, response, options.cacheTTL || 3600);
-
-				return response;
-			} catch (error) {
-				lastError = error;
-				logger.warn(`${provider} failed, trying next provider:`, error.message);
-				continue;
-			}
+			return response;
+		} catch (error) {
+			logger.error('Google AI failed:', error.message);
+			throw error;
 		}
-
-		// All providers failed
-		throw lastError || new Error('All AI providers failed');
 	}
 
 	// Generate contract sections with caching
@@ -214,17 +225,6 @@ class AIService {
 	// Health check for all providers
 	async healthCheck() {
 		const results = {};
-
-		try {
-			await openai.chat.completions.create({
-				model: 'gpt-4',
-				messages: [{ role: 'user', content: 'test' }],
-				max_tokens: 5
-			});
-			results.openai = true;
-		} catch (error) {
-			results.openai = false;
-		}
 
 		if (googleAI) {
 			try {

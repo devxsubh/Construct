@@ -28,7 +28,6 @@ const envValidate = Joi.object()
 
 		FRONTEND_URL: Joi.string().allow('').empty('').default('http://localhost:777'),
 		IMAGE_URL: Joi.string().allow('').empty('').default('http://localhost:666/images'),
-		OPENAI_API_KEY: Joi.string().allow('').empty(''),
 		GOOGLE_AI_API_KEY: Joi.string().required(),
 
 		CLOUDINARY_CLOUD_NAME: Joi.string().allow('').empty(''),
@@ -90,10 +89,6 @@ export default {
 		REFRESH: 'refresh',
 		VERIFY_EMAIL: 'verifyEmail',
 		RESET_PASSWORD: 'resetPassword'
-	},
-
-	openai: {
-		apiKey: env.OPENAI_API_KEY
 	},
 
 	cloudinary: {

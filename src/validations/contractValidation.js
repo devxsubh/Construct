@@ -67,6 +67,30 @@ const downloadContractPDF = {
 	})
 };
 
+const modifyContractWithPrompt = {
+	params: Joi.object().keys({
+		contractId: Joi.string().custom(mongoId).required()
+	}),
+	body: Joi.object().keys({
+		prompt: Joi.string().min(5).max(2000).required().messages({
+			'string.min': 'Please provide a clear instruction (at least 5 characters)',
+			'string.max': 'Instruction is too long (maximum 2000 characters)',
+			'any.required': 'Please provide an instruction for how to modify the contract'
+		}),
+		selectedBlocks: Joi.array()
+			.items(
+				Joi.object({
+					id: Joi.string().optional(),
+					type: Joi.string().required(),
+					content: Joi.alternatives().try(Joi.string(), Joi.array()).required(),
+					props: Joi.object().optional()
+				})
+			)
+			.optional()
+			.description('Selected BlockNote blocks for selective editing (optional)')
+	})
+};
+
 const getUserContracts = {
 	query: Joi.object().keys({
 		page: Joi.number().integer(),
@@ -356,5 +380,6 @@ export default {
 	resolveContractComment,
 	compareMarketStandards,
 	sendContractEmail,
-	downloadContractPDF
+	downloadContractPDF,
+	modifyContractWithPrompt
 };

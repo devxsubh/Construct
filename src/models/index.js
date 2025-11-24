@@ -5,7 +5,7 @@ export { default as Permission } from './permissionModel.js';
 export { default as Template } from './Template.js';
 export { default as Contract } from './contract.js';
 export { default as Conversation } from './conversation.model.js';
-export { default as MessageEmbedding } from './messageEmbedding.js';
+export { default as ContractConversation } from './contractConversation.js';
 export { default as Notification } from './Notification.js';
 export { default as Plan } from './Plan.js';
 export { default as Subscription } from './Subscription.js';

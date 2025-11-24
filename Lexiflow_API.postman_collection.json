@@ -421,6 +421,43 @@
 					}
 				},
 				{
+					"name": "Modify Contract with Prompt (Conversation History)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"prompt\": \"Add a confidentiality clause and make the payment terms more detailed\",\n  \"selectedBlocks\": []\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"description": "Modify an existing contract using AI prompts with conversation history (like ChatGPT Canvas). This endpoint allows iterative contract editing with full conversation context maintained by Google AI.\n\n**Full Document Modification:**\n```json\n{\n  \"prompt\": \"Add a confidentiality clause\"\n}\n```\n\n**Selective Editing (Cursor-style):**\n```json\n{\n  \"prompt\": \"Fix grammar\",\n  \"selectedBlocks\": [\n    {\n      \"id\": \"block-1\",\n      \"type\": \"paragraph\",\n      \"content\": \"Selected text to modify\"\n    }\n  ]\n}\n```\n\n**Example prompts:**\n- \"Add a confidentiality clause\"\n- \"Make the payment terms more detailed\"\n- \"Change the tone to be more formal\"\n- \"Fix grammar in the selected text\"\n- \"Remove the termination clause\"\n- \"Add a dispute resolution section\"\n\n**Features:**\n- Maintains conversation history per contract\n- Supports selective editing (only modify selected blocks)\n- Context-aware modifications using Google AI chat history\n- No embeddings required - uses native conversation context",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/:contractId/modify",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", ":contractId", "modify"],
+							"variable": [
+								{
+									"key": "contractId",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
 					"name": "Auto-save Contract",
 					"request": {
 						"method": "PATCH",
@@ -1136,6 +1173,113 @@
 							"raw": "{{baseUrl}}/api/v1/images/upload",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "images", "upload"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "Check AI Health",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/health/ai",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", "health", "ai"]
+						}
+					}
+				},
+				{
+					"name": "Check Cache Health",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/health/cache",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", "health", "cache"]
+						}
+					}
+				},
+				{
+					"name": "Get Contract Conversation History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"description": "Get conversation history for a contract. Shows all prompts and AI responses for iterative editing. This history is used by Google AI to maintain context across multiple edits.\n\n**Response includes:**\n- Full conversation history (user prompts and AI responses)\n- Contract context (title, type, parties, jurisdiction)\n- Timestamps for each message\n- Modified blocks tracking (for selective editing)",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/:contractId/conversation",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", ":contractId", "conversation"],
+							"variable": [
+								{
+									"key": "contractId",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Check Third-Party APIs Health",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"description": "Comprehensive health check for all third-party APIs and services:\n\n- Google AI (Gemini text generation)\n- MongoDB Database\n- SMTP/Email Service\n- Cloudinary (image storage)\n- Razorpay (payment gateway)\n\nOptional query parameter: ?services=googleAI,database to check specific services only.",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/health/third-party?services=googleAI,database,email,cloudinary,razorpay",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", "health", "third-party"],
+							"query": [
+								{
+									"key": "services",
+									"value": "googleAI,database,email,cloudinary,razorpay",
+									"description": "Optional: Comma-separated list of services to check. Leave empty to check all services.",
+									"disabled": true
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Check Third-Party APIs (All Services)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"description": "Check all third-party APIs without filtering",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/contracts/health/third-party",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "contracts", "health", "third-party"]
 						}
 					}
 				}

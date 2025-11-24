@@ -5,8 +5,7 @@ A comprehensive legal contract management system with AI-powered contract genera
 ## Features
 
 ### AI-Powered Contract Generation
-- **Multi-Provider AI Support**: Google AI (Gemini) primary with OpenAI GPT-4 fallback
-- **Intelligent Fallback**: Automatic provider switching when one fails
+- **Google AI (Gemini)**: Primary AI provider for contract generation and analysis
 - **Response Caching**: In-memory caching to reduce API calls and improve performance
 - **Template Caching**: Common contract templates are cached for faster access
 
@@ -44,9 +43,8 @@ A comprehensive legal contract management system with AI-powered contract genera
 Add these to your `.env` file:
 
 ```env
-# AI Providers (Google AI is primary, OpenAI is fallback)
+# AI Provider (Google AI)
 GOOGLE_AI_API_KEY=your_google_ai_api_key
-OPENAI_API_KEY=your_openai_api_key
 
 # Note: Caching is now handled in-memory (no Redis required)
 
@@ -89,11 +87,7 @@ RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 ### Google AI (Gemini) - Primary Provider
 - Get API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 - Supports multiple Gemini models: gemini-2.5-flash, gemini-1.5-flash, gemini-pro
-
-### OpenAI - Fallback Provider
-- Get API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-- Add to `.env`: `OPENAI_API_KEY=your_key`
-- Used for embeddings: `text-embedding-3-small` (1536 dimensions)
+- Used for both text generation and embeddings (embedding-001 model, 768 dimensions)
 
 ## Vector Embeddings & Semantic Search
 
@@ -612,7 +606,6 @@ Response:
 ```json
 {
   "ai": {
-    "openai": true,
     "google": true
   },
   "cache": true,

@@ -15,7 +15,8 @@ import notificationService from '~/services/notificationService';
 import subscriptionService from '~/services/subscriptionService';
 import contractGenerationService from '~/services/contractGenerationService';
 import APIError from '~/utils/apiError';
-// Initialize OpenAI client
+import ContractConversation from '~/models/contractConversation';
+// AI services use Google AI only
 
 class ContractController {
 	async createContract(req, res) {
@@ -51,13 +52,29 @@ class ContractController {
 
 			const contract = await contractService.createContract(contractData, req.user.id);
 
+			// Initialize conversation history for this contract (async, don't wait)
+			const contractObj = contract.toObject ? contract.toObject() : contract;
+			ContractConversation.create({
+				contractId: contract._id,
+				userId: req.user.id,
+				history: [],
+				contractContext: {
+					title: contractObj.title,
+					type: contractObj.type,
+					parties: contractObj.parties ? JSON.parse(JSON.stringify(contractObj.parties)) : [],
+					jurisdiction: contractObj.jurisdiction,
+					description: contractObj.description
+				}
+			}).catch((err) => {
+				logger.error('Failed to initialize contract conversation:', err);
+			});
+
 			// Increment contract count (only for free tier users)
 			// Subscription users have unlimited contracts
 			if (req.subscriptionInfo && !req.subscriptionInfo.hasSubscription) {
 				await subscriptionService.incrementContractCount(req.user.id);
 			}
 
-			const contractObj = contract.toObject();
 			res.status(201).json({ ...contractObj, lexiId: contractObj.lexiId });
 		} catch (error) {
 			res.status(400).json({ error: error.message });
@@ -135,6 +152,8 @@ class ContractController {
 			},
 			req.user.id
 		);
+
+		// Note: Conversation history is updated separately via modifyContractWithPrompt
 
 		// Invalidate relevant caches
 		await cacheService.invalidateCache('contracts:*');
@@ -246,6 +265,14 @@ class ContractController {
 			// Get contract details before deletion for notification
 			const contract = await contractService.getContract(req.params.contractId);
 
+			// Delete contract conversation history (async, don't wait)
+			ContractConversation.deleteOne({
+				contractId: req.params.contractId,
+				userId: req.user.id
+			}).catch((err) => {
+				logger.error('Failed to delete contract conversation:', err);
+			});
+
 			const result = await contractService.deleteContract(req.params.contractId, req.user.id);
 
 			// Create notification for contract deletion
@@ -337,6 +364,36 @@ class ContractController {
 
 		// Create the contract
 		const contract = await contractService.createContract(contractData, req.user.id);
+
+		// Initialize conversation history with initial generation prompt
+		const initialHistory = [
+			{
+				role: 'user',
+				parts: prompt.trim(),
+				timestamp: new Date()
+			},
+			{
+				role: 'model',
+				parts: JSON.stringify(contractData),
+				timestamp: new Date()
+			}
+		];
+
+		const contractObj = contract.toObject ? contract.toObject() : contract;
+		ContractConversation.create({
+			contractId: contract._id,
+			userId: req.user.id,
+			history: initialHistory,
+			contractContext: {
+				title: contractObj.title,
+				type: contractObj.type,
+				parties: contractObj.parties ? JSON.parse(JSON.stringify(contractObj.parties)) : [],
+				jurisdiction: contractObj.jurisdiction,
+				description: contractObj.description
+			}
+		}).catch((err) => {
+			logger.error('Failed to initialize contract conversation:', err);
+		});
 
 		// Increment contract count (only for free tier users)
 		// Subscription users have unlimited contracts
@@ -1079,6 +1136,36 @@ ${parties.map((party, index) => `<p>${index + 1}. <strong>${party.name}</strong>
 		});
 	});
 
+
+	/**
+	 * Check third-party APIs health
+	 * Comprehensive health check for all external services
+	 */
+	checkThirdPartyAPIs = catchAsync(async (req, res) => {
+		const thirdPartyHealthService = (await import('../services/thirdPartyHealthService.js')).default;
+		const { services } = req.query; // Optional: ?services=googleAI,database
+
+		// Parse services query parameter
+		const servicesToCheck = services ? services.split(',').map((s) => s.trim()) : null;
+
+		const healthResults = await thirdPartyHealthService.checkAll({
+			services: servicesToCheck
+		});
+
+		// Determine HTTP status based on overall health
+		let httpStatusCode = httpStatus.OK;
+		if (healthResults.overall === 'unhealthy') {
+			httpStatusCode = httpStatus.SERVICE_UNAVAILABLE;
+		} else if (healthResults.overall === 'degraded') {
+			httpStatusCode = httpStatus.OK; // Still OK, but some services not configured
+		}
+
+		res.status(httpStatusCode).send({
+			success: healthResults.overall !== 'unhealthy',
+			data: healthResults
+		});
+	});
+
 	checkPreviewHealth = catchAsync(async (req, res) => {
 		console.log('Preview health check called from IP:', req.ip, 'at', new Date().toISOString());
 		try {
@@ -1440,6 +1527,226 @@ ${parties.map((party, index) => `<p>${index + 1}. <strong>${party.name}</strong>
 		} catch (error) {
 			res.status(404).json({ error: error.message });
 		}
+	});
+
+	/**
+	 * Modify an existing contract using AI prompt (iterative editing like ChatGPT Canvas)
+	 * Uses conversation history for context-aware modifications
+	 */
+	modifyContractWithPrompt = catchAsync(async (req, res) => {
+		const { contractId } = req.params;
+		const { prompt, selectedBlocks } = req.body; // selectedBlocks for selective editing
+		const userId = req.user.id;
+
+		if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 5) {
+			throw new APIError(
+				'Please provide a clear instruction for how to modify the contract (minimum 5 characters)',
+				httpStatus.BAD_REQUEST
+			);
+		}
+
+		// Get the existing contract
+		const contract = await contractService.getContract(contractId);
+		if (!contract) {
+			throw new APIError('Contract not found', httpStatus.NOT_FOUND);
+		}
+
+		// Verify ownership
+		if (contract.userId.toString() !== userId.toString()) {
+			throw new APIError('Unauthorized to modify this contract', httpStatus.FORBIDDEN);
+		}
+
+		// Get or create conversation history for this contract
+		let conversation = await ContractConversation.findOne({ contractId, userId });
+		if (!conversation) {
+			// Initialize conversation if it doesn't exist
+			const contractObj = contract.toObject ? contract.toObject() : contract;
+			conversation = await ContractConversation.create({
+				contractId,
+				userId,
+				history: [],
+				contractContext: {
+					title: contractObj.title,
+					type: contractObj.type,
+					parties: contractObj.parties ? JSON.parse(JSON.stringify(contractObj.parties)) : [],
+					jurisdiction: contractObj.jurisdiction,
+					description: contractObj.description
+				}
+			});
+		}
+
+		// Import blockNoteConverter for text conversion
+		const { convertBlockNoteToText } = await import('../utils/blockNoteConverter.js');
+
+		// Convert current contract content to text for context
+		const currentContractText = convertBlockNoteToText(contract.content);
+
+		// Build modification prompt
+		let modificationPrompt;
+		if (selectedBlocks && Array.isArray(selectedBlocks) && selectedBlocks.length > 0) {
+			// Selective editing: only modify selected blocks
+			const selectedText = convertBlockNoteToText(selectedBlocks);
+			modificationPrompt = `You are modifying a legal contract. The user has selected specific parts to modify.
+
+Contract Context:
+Title: ${contract.title}
+Type: ${contract.type}
+Jurisdiction: ${contract.jurisdiction}
+Parties: ${contract.parties.map((p) => `${p.name} (${p.role})`).join(', ')}
+
+Selected text to modify:
+${selectedText}
+
+Full contract context (for understanding only, DO NOT modify):
+${currentContractText.substring(0, 2000)}...
+
+User's modification request: "${prompt.trim()}"
+
+IMPORTANT: Return ONLY the modified version of the selected text in BlockNote JSON format (array of blocks). Do not modify or return the entire contract, only the selected portion.`;
+		} else {
+			// Full contract modification
+			modificationPrompt = `You are modifying an existing legal contract. Here is the current contract:
+
+Title: ${contract.title}
+Type: ${contract.type}
+Description: ${contract.description}
+Jurisdiction: ${contract.jurisdiction}
+Parties: ${contract.parties.map((p) => `${p.name} (${p.role})`).join(', ')}
+
+Current Contract Content:
+${currentContractText}
+
+User's modification request: "${prompt.trim()}"
+
+IMPORTANT INSTRUCTIONS:
+1. Modify the contract according to the user's request while maintaining legal soundness
+2. Preserve the contract structure and important clauses unless explicitly asked to change them
+3. Return the ENTIRE modified contract in BlockNote JSON format (array of blocks)
+4. If the user wants to add something, integrate it naturally into the existing structure
+5. If the user wants to remove something, remove it but maintain document coherence
+6. If the user wants to change tone/style, apply it throughout while keeping legal meaning
+7. Return ONLY a valid JSON array of BlockNote blocks, no additional text or markdown
+
+BlockNote format structure:
+- Each block is an object with "type" and "content" properties
+- Supported block types: "paragraph", "heading", "quote", "bulletListItem", "numberedListItem", "checkListItem"
+- Headings can have props: { "level": 1-3 }
+- Content can be a string (for simple text) or an array of inline content objects
+- Inline content objects have: { "type": "text", "text": "...", "styles": { "bold": true, "italic": true } }`;
+		}
+
+		// Use AI service with conversation history
+		const result = await aiService.generateWithChatHistory(modificationPrompt, conversation.history, {
+			systemPrompt:
+				'You are a legal contract expert. Modify existing contracts based on user instructions while maintaining legal soundness. Return ONLY a valid JSON array of BlockNote blocks, no additional text.',
+			temperature: 0.7
+		});
+
+		// Parse the modified content
+		const modifiedBlocks = contractGenerationService.parseBlockNoteContent(result.text);
+
+		// Ensure modifiedBlocks is an array
+		if (!Array.isArray(modifiedBlocks)) {
+			throw new APIError('Failed to parse modified contract content', httpStatus.INTERNAL_SERVER_ERROR);
+		}
+
+		// Merge modified blocks if selective editing
+		let finalContent;
+		if (selectedBlocks && Array.isArray(selectedBlocks) && selectedBlocks.length > 0) {
+			// Merge: replace selected blocks with modified blocks
+			const blockMap = new Map(modifiedBlocks.map((b) => [b.id || b.content?.substring(0, 50), b]));
+			finalContent = contract.content.map((block) => {
+				// Try to match selected blocks with modified blocks
+				const selectedBlock = selectedBlocks.find((sb) => sb.id === block.id);
+				if (selectedBlock) {
+					const modified = modifiedBlocks.find((mb) => mb.id === block.id || mb.content === block.content);
+					return modified || block;
+				}
+				return block;
+			});
+		} else {
+			// Full contract replacement
+			finalContent = modifiedBlocks;
+		}
+
+		// Update the contract with modified content
+		const updatedContract = await contractService.updateContract(
+			contractId,
+			{
+				content: finalContent
+			},
+			userId
+		);
+
+		// Update conversation history
+		await conversation.addMessage('user', prompt.trim());
+		await conversation.addMessage('model', result.text);
+
+		// Invalidate cache
+		await cacheService.invalidateCache(`contract:${contractId}`);
+		await cacheService.invalidateCache(`user_contracts:${userId}:*`);
+
+		res.status(httpStatus.OK).send({
+			success: true,
+			message: 'Contract modified successfully',
+			data: {
+				...updatedContract.toObject(),
+				lexiId: updatedContract.lexiId,
+				conversationHistory: result.history
+			}
+		});
+	});
+
+	/**
+	 * Get conversation history for a contract
+	 * GET /api/v1/contracts/:contractId/conversation
+	 */
+	getContractConversation = catchAsync(async (req, res) => {
+		const { contractId } = req.params;
+		const userId = req.user.id;
+
+		// Get the contract to verify ownership
+		const contract = await contractService.getContract(contractId);
+		if (!contract) {
+			throw new APIError('Contract not found', httpStatus.NOT_FOUND);
+		}
+
+		// Verify ownership
+		if (contract.userId.toString() !== userId.toString()) {
+			throw new APIError('Unauthorized to view this contract conversation', httpStatus.FORBIDDEN);
+		}
+
+		// Get conversation history
+		const conversation = await ContractConversation.findOne({ contractId, userId });
+
+		if (!conversation) {
+			// Return empty history if no conversation exists yet
+			return res.status(httpStatus.OK).send({
+				success: true,
+				data: {
+					contractId,
+					history: [],
+					contractContext: {
+						title: contract.title,
+						type: contract.type,
+						parties: contract.parties,
+						jurisdiction: contract.jurisdiction,
+						description: contract.description
+					}
+				}
+			});
+		}
+
+		res.status(httpStatus.OK).send({
+			success: true,
+			data: {
+				contractId: conversation.contractId,
+				history: conversation.history,
+				contractContext: conversation.contractContext,
+				createdAt: conversation.createdAt,
+				updatedAt: conversation.updatedAt
+			}
+		});
 	});
 }
 

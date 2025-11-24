@@ -1,17 +1,7 @@
-import { OpenAI } from 'openai';
-import config from '~/config/config';
 import Conversation from '../models/conversation.model';
 import APIError from '~/utils/apiError';
 import httpStatus from 'http-status';
-import cacheService from './cacheService';
 import aiService from './aiService';
-import contextService from './contextService';
-import logger from '../config/logger';
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-	apiKey: config.openai.apiKey
-});
 
 class LexiAIService {
 	async createConversation(userId, title, description = '') {
@@ -135,30 +125,7 @@ class LexiAIService {
 			const conversation = await this.getConversation(conversationId, userId);
 			await conversation.addMessage(role, content, metadata);
 
-			// Get the newly added message (last message in array)
-			const newMessage = conversation.messages[conversation.messages.length - 1];
-
-			// Generate and store embedding for non-system messages (async, don't wait)
-			if (role !== 'system' && newMessage._id) {
-				contextService
-					.storeMessageEmbedding({
-						userId,
-						conversationId,
-						messageId: newMessage._id,
-						role,
-						content,
-						metadata
-					})
-					.catch((err) => {
-						// Log error but don't fail the message addition
-						logger.error('Failed to store message embedding:', err);
-					});
-
-				// Mark embedding as generated
-				newMessage.embeddingGenerated = true;
-				await conversation.save();
-			}
-
+			// Messages are stored in conversation history (no embedding needed)
 			return conversation;
 		} catch (error) {
 			if (error instanceof APIError) {
@@ -226,99 +193,45 @@ class LexiAIService {
 			// Prepare the system message based on intent and options
 			const systemMessage = this.prepareSystemMessage(intent, documentType, tone);
 
-			// Get conversation context using semantic search if conversationId is provided
-			let contextMessages = [];
-			if (conversationId && userId) {
-				try {
-					// Use semantic search to find relevant context
-					const semanticContext = await contextService.getRelevantContext(message, {
-						userId,
-						conversationId,
-						recentLimit: 2,
-						semanticLimit: 5,
-						threshold: 0.7
-					});
-
-					// Also get recent messages as fallback
-					const conversation = await this.getConversation(conversationId, userId);
-					const recentMessages = conversation.getRecentMessages(3);
-
-					// Combine semantic and recent messages, removing duplicates
-					const messageMap = new Map();
-
-					// Add recent messages first (they're more important for continuity)
-					recentMessages.forEach((msg) => {
-						if (msg.role !== 'system') {
-							messageMap.set(msg.content.substring(0, 100), {
-								role: msg.role,
-								content: msg.content
-							});
-						}
-					});
-
-					// Add semantic context (may override recent if more relevant)
-					semanticContext.forEach((msg) => {
-						if (msg.role !== 'system') {
-							messageMap.set(msg.content.substring(0, 100), {
-								role: msg.role,
-								content: msg.content
-							});
-						}
-					});
-
-					contextMessages = Array.from(messageMap.values());
-				} catch (error) {
-					// Fallback to recent messages if semantic search fails
-					logger.warn('Semantic search failed, using recent messages:', error.message);
-					const conversation = await this.getConversation(conversationId, userId);
-					contextMessages = conversation.getRecentMessages(5);
-				}
-			}
-
-			// Prepare messages for AI
-			const messages = [{ role: 'system', content: systemMessage }, ...contextMessages, { role: 'user', content: message }];
-
-			// Provider stickiness and fallback logic
-			let provider = conversationId ? await cacheService.getAIProviderForConversation(conversationId) : null;
-			if (!provider) provider = 'google'; // Default to Google AI (Gemini)
+			// Use Google AI with conversation history if available
 			let aiResponse;
 			let responseTime;
-			let usedProvider = provider;
+			const usedProvider = 'google';
 
-			for (let attempt = 0; attempt < 2; attempt++) {
-				try {
-					if (provider === 'google') {
-						const response = await aiService.generateWithGoogleAI(message, {
-							systemPrompt: systemMessage,
-							temperature: 0.7,
-							maxTokens: 1000
-						});
-						aiResponse = response;
-					} else {
-						const response = await aiService.generateWithOpenAI(message, {
-							model: 'gpt-4',
-							messages,
-							systemPrompt: systemMessage,
-							temperature: 0.7,
-							maxTokens: 1000
-						});
-						aiResponse = response;
-					}
-					responseTime = Date.now() - startTime;
-					usedProvider = provider;
-					// On success, set provider in cache for stickiness
-					if (conversationId) await cacheService.setAIProviderForConversation(conversationId, provider);
-					break;
-				} catch (err) {
-					// On first failure, switch provider and retry
-					if (attempt === 0) {
-						provider = provider === 'google' ? 'openai' : 'google';
-						if (conversationId) await cacheService.setAIProviderForConversation(conversationId, provider);
-						continue;
-					} else {
-						throw new APIError(`Error processing legal query: ${err.message}`, httpStatus.INTERNAL_SERVER_ERROR);
+			try {
+				// Get conversation history if conversationId exists
+				let history = [];
+				if (conversationId && userId) {
+					const conversation = await this.getConversation(conversationId, userId);
+					if (conversation) {
+						// Format history for Google AI
+						history = conversation.messages
+							.filter((msg) => msg.role !== 'system')
+							.map((msg) => ({
+								role: msg.role === 'user' ? 'user' : 'model',
+								parts: msg.content
+							}));
 					}
 				}
+
+				// Use chat history if available, otherwise use simple generation
+				if (history.length > 0) {
+					const result = await aiService.generateWithChatHistory(message, history, {
+						systemPrompt: systemMessage,
+						temperature: 0.7
+					});
+					aiResponse = result.text;
+				} else {
+					const response = await aiService.generateWithGoogleAI(message, {
+						systemPrompt: systemMessage,
+						temperature: 0.7,
+						maxTokens: 1000
+					});
+					aiResponse = response;
+				}
+				responseTime = Date.now() - startTime;
+			} catch (err) {
+				throw new APIError(`Error processing legal query: ${err.message}`, httpStatus.INTERNAL_SERVER_ERROR);
 			}
 
 			// Extract metadata from response
@@ -386,23 +299,26 @@ class LexiAIService {
 
 	async analyzeIntent(message) {
 		try {
-			const response = await openai.chat.completions.create({
-				model: 'gpt-4',
-				messages: [
-					{
-						role: 'system',
-						content: 'Analyze this legal query and determine the intent. Return a JSON object with type and confidence.'
-					},
-					{
-						role: 'user',
-						content: message
-					}
-				],
+			const responseText = await aiService.generateWithGoogleAI(message, {
+				systemPrompt: 'Analyze this legal query and determine the intent. Return a JSON object with type and confidence.',
 				temperature: 0.3,
-				max_tokens: 100
+				maxTokens: 500
 			});
 
-			const result = JSON.parse(response.choices[0].message.content);
+			// Parse JSON response
+			let result;
+			try {
+				result = JSON.parse(responseText);
+			} catch {
+				// If not JSON, try to extract JSON from text
+				const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+				if (jsonMatch) {
+					result = JSON.parse(jsonMatch[0]);
+				} else {
+					throw new Error('Invalid response format');
+				}
+			}
+
 			return {
 				type: result.type || 'general',
 				clauseType: result.clauseType,

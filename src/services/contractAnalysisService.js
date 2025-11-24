@@ -1,4 +1,3 @@
-import { OpenAI } from 'openai';
 import config from '~/config/config';
 import logger from '~/config/logger';
 import cacheService from './cacheService';
@@ -6,9 +5,7 @@ import aiService from './aiService';
 
 class ContractAnalysisService {
 	constructor() {
-		this.openai = new OpenAI({
-			apiKey: config.openai.apiKey
-		});
+		// Using Google AI only
 	}
 
 	async analyzeContract(contract, options = {}) {
@@ -128,51 +125,18 @@ Format the response as a structured JSON object with the following sections:
 	}
 
 	async getAIAnalysis(prompt, contractId) {
-		// Use contractId as the context for provider stickiness
-		let provider = contractId ? await cacheService.getAIProviderForConversation(contractId) : null;
-		if (!provider) provider = 'google'; // Default to Google AI (Gemini)
+		// Use Google AI only
 		let aiResponse;
-		for (let attempt = 0; attempt < 2; attempt++) {
-			try {
-				if (provider === 'google') {
-					aiResponse = await aiService.generateWithGoogleAI(prompt, {
-						systemPrompt:
-							'You are an expert contract analyst with deep knowledge of legal compliance, risk assessment, and contract law. Provide detailed, accurate, and actionable analysis.',
-						temperature: 0.3,
-						maxTokens: 4000
-					});
-				} else {
-					aiResponse = await aiService.generateWithOpenAI(prompt, {
-						model: 'gpt-4',
-						messages: [
-							{
-								role: 'system',
-								content:
-									'You are an expert contract analyst with deep knowledge of legal compliance, risk assessment, and contract law. Provide detailed, accurate, and actionable analysis.'
-							},
-							{
-								role: 'user',
-								content: prompt
-							}
-						],
-						temperature: 0.3,
-						maxTokens: 4000
-					});
-				}
-				// On success, set provider in cache for stickiness
-				if (contractId) await cacheService.setAIProviderForConversation(contractId, provider);
-				break;
-			} catch (err) {
-				// On first failure, switch provider and retry
-				if (attempt === 0) {
-					provider = provider === 'google' ? 'openai' : 'google';
-					if (contractId) await cacheService.setAIProviderForConversation(contractId, provider);
-					continue;
-				} else {
-					logger.error('All AI providers failed for contract analysis:', err);
-					throw new Error('All AI providers failed for contract analysis');
-				}
-			}
+		try {
+			aiResponse = await aiService.generateWithGoogleAI(prompt, {
+				systemPrompt:
+					'You are an expert contract analyst with deep knowledge of legal compliance, risk assessment, and contract law. Provide detailed, accurate, and actionable analysis.',
+				temperature: 0.3,
+				maxTokens: 4000
+			});
+		} catch (err) {
+			logger.error('AI provider failed for contract analysis:', err);
+			throw new Error('AI provider failed for contract analysis');
 		}
 		try {
 			const cleaned = this.cleanAIJsonResponse(aiResponse);
@@ -279,43 +243,16 @@ Format the response as a structured JSON object with the following sections:
 		const prompt = `${isCustom ? customPrompt : actionPrompts[action]}
 
 ${text}`;
-		// Use provider stickiness/fallback per contract
-		let provider = contractId ? await cacheService.getAIProviderForConversation(contractId) : null;
-		if (!provider) provider = 'openai';
+		// Use Google AI only
 		let aiResponse;
-		for (let attempt = 0; attempt < 2; attempt++) {
-			try {
-				if (provider === 'openai') {
-					aiResponse = await aiService.generateWithOpenAI(prompt, {
-						model: 'gpt-4',
-						messages: [
-							{ role: 'system', content: 'You are a legal contract expert.' },
-							{ role: 'user', content: prompt }
-						],
-						temperature: 0.5,
-						maxTokens: 1000
-					});
-				} else {
-					aiResponse = await aiService.generateWithGoogleAI(prompt, {
-						messages: [
-							{ role: 'system', content: 'You are a legal contract expert.' },
-							{ role: 'user', content: prompt }
-						],
-						temperature: 0.5,
-						maxTokens: 1000
-					});
-				}
-				if (contractId) await cacheService.setAIProviderForConversation(contractId, provider);
-				break;
-			} catch (err) {
-				if (attempt === 0) {
-					provider = provider === 'openai' ? 'google' : 'openai';
-					if (contractId) await cacheService.setAIProviderForConversation(contractId, provider);
-					continue;
-				} else {
-					throw new Error('All AI providers failed for clause action: ' + err.message);
-				}
-			}
+		try {
+			aiResponse = await aiService.generateWithGoogleAI(prompt, {
+				systemPrompt: 'You are a legal contract expert.',
+				temperature: 0.5,
+				maxTokens: 1000
+			});
+		} catch (err) {
+			throw new Error('AI provider failed for clause action: ' + err.message);
 		}
 		// For simplify, try to parse as JSON and return structured result
 		if ((action === 'simplify' || action === 'improve') && aiResponse) {

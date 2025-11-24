@@ -39,12 +39,32 @@ export const handler = (err, req, res, next) => {
 		status = httpStatus.INTERNAL_SERVER_ERROR;
 		message = httpStatus[httpStatus.INTERNAL_SERVER_ERROR];
 	}
-	logger.error(err.stack);
-	return res.status(status).json({
+	
+	// Log error properly (avoid [object Object] issue)
+	if (err instanceof Error) {
+		logger.error('API Error:', {
+			message: err.message,
+			status: err.status,
+			stack: err.stack,
+			metadata: err.metadata
+		});
+	} else {
+		logger.error('Unknown error:', err);
+	}
+	
+	// Build response with metadata if available
+	const response = {
 		status: status,
 		errors: message,
-		...(config.NODE_ENV === 'development' && { stack: err.stack })
-	});
+		...(err.metadata && { metadata: err.metadata })
+	};
+	
+	// Add stack trace in development
+	if (config.NODE_ENV === 'development') {
+		response.stack = err.stack;
+	}
+	
+	return res.status(status).json(response);
 };
 
 export default { converter, notFound, handler };

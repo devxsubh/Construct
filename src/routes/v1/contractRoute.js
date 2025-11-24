@@ -24,6 +24,14 @@ router.post(
 	catchAsync(contractController.generateAIContract)
 );
 
+// Iterative contract modification endpoint (conversation history-based, like ChatGPT Canvas)
+router.post(
+	'/:contractId/modify',
+	authenticate(),
+	validate(contractValidation.modifyContractWithPrompt),
+	catchAsync(contractController.modifyContractWithPrompt)
+);
+
 router.put(
 	'/:contractId',
 	authenticate(),
@@ -154,12 +162,16 @@ router.post(
 // Health check endpoints
 router.get('/health/ai', authenticate(), catchAsync(contractController.checkAIHealth));
 router.get('/health/cache', authenticate(), catchAsync(contractController.getCacheHealth));
+router.get('/health/third-party', authenticate(), catchAsync(contractController.checkThirdPartyAPIs));
 
 router.patch('/:contractId/favorite', authenticate(), catchAsync(contractController.addToFavorite));
 router.patch('/:contractId/unfavorite', authenticate(), catchAsync(contractController.removeFromFavorite));
 
 // Fetch all conversation actions for a contract
 router.get('/:contractId/conversation-actions', authenticate(), catchAsync(contractController.getConversationActions));
+
+// Get contract conversation history
+router.get('/:contractId/conversation', authenticate(), catchAsync(contractController.getContractConversation));
 
 // Download contract as PDF
 router.get(
